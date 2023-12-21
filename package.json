@@ -1,11 +1,11 @@
 {
-    "name": "vscode-clangd",
-    "displayName": "clangd",
+    "name": "vscode-clangd-multi-project",
+    "displayName": "clangd-multi-project",
     "description": "C/C++ completion, navigation, and insights",
     "version": "0.1.26",
-    "publisher": "llvm-vs-code-extensions",
+    "publisher": "eclipse-cdt.cloud",
     "license": "MIT",
-    "homepage": "https://clangd.llvm.org/",
+    "homepage": "https://www.eclipse.org/cdt-cloud/",
     "icon": "icon.png",
     "engines": {
         "vscode": "^1.65.0"
@@ -41,9 +41,9 @@
         "format": "clang-format -i --glob=\"{src,test}/*.ts\"",
         "test-compile": "tsc -p ./ && npm run compile",
         "test": "npm run test-compile && node ./out/test/index.js",
-        "package": "vsce package --baseImagesUrl https://raw.githubusercontent.com/clangd/vscode-clangd/master/",
-        "publish": "vsce publish --baseImagesUrl https://raw.githubusercontent.com/clangd/vscode-clangd/master/",
-        "publish-openvsx": "ovsx publish --baseImagesUrl https://raw.githubusercontent.com/clangd/vscode-clangd/master/",
+        "package": "vsce package --baseImagesUrl https://raw.githubusercontent.com/eclipsesource/eclipse-cdt-cloud/vscode-clangd/",
+        "publish": "vsce publish --baseImagesUrl https://raw.githubusercontent.com/eclipsesource/eclipse-cdt-cloud/vscode-clangd/",
+        "publish-openvsx": "ovsx publish --baseImagesUrl https://raw.githubusercontent.com/eclipsesource/eclipse-cdt-cloud/vscode-clangd/",
         "git-clang-format": "git-clang-format --extensions=ts"
     },
     "dependencies": {
@@ -170,6 +170,22 @@
                     "type": "number",
                     "default": 0.55,
                     "description": "Opacity of inactive regions (used only if clangd.inactiveRegions.useBackgroundHighlight=false)"
+                },
+                "clangd.multiProject.enabled":{
+                    "type":"boolean",
+                    "default":false,
+                    "description": "Use dedicated clangd server instances for each project in the workspace"
+
+                },
+                "clangd.multiProject.strategy": {
+                    "type": "string",
+                    "default": "workspaceFolders",
+                    "description": "The strategy used for identifying projects"
+                },
+                "clangd.multiProject.status": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Flag to enable/disable the project status bar"
                 }
             }
         },
