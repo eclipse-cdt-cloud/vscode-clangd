@@ -1,11 +1,11 @@
 {
-    "name": "vscode-clangd-multi-project",
-    "displayName": "clangd-multi-project",
-    "description": "C/C++ completion, navigation, and insights",
-    "version": "0.1.0",
+    "name": "vscode-clangd-cdtcloud",
+    "displayName": "vscode-clangd-cdtcloud",
+    "description": "Fork of the clangd VS Code extension for C/C++ completion, navigation, and insights, plus better support for multiple projects in a single workspace.",
+    "version": "0.1.26",
     "publisher": "eclipse-cdt",
     "license": "MIT",
-    "homepage": "https://www.eclipse.org/cdt-cloud/",
+    "homepage": "https://eclipse.dev/cdt-cloud",
     "icon": "icon.png",
     "engines": {
         "vscode": "^1.65.0"
@@ -76,7 +76,10 @@
         "untrustedWorkspaces": {
             "supported": "limited",
             "description": "In restricted mode clangd.path and clangd.arguments are not respected.",
-            "restrictedConfigurations": ["clangd.path", "clangd.arguments"]
+            "restrictedConfigurations": [
+                "clangd.path",
+                "clangd.arguments"
+            ]
         }
     },
     "contributes": {
@@ -171,11 +174,10 @@
                     "default": 0.55,
                     "description": "Opacity of inactive regions (used only if clangd.inactiveRegions.useBackgroundHighlight=false)"
                 },
-                "clangd.multiProject.enabled":{
-                    "type":"boolean",
-                    "default":false,
+                "clangd.multiProject.enabled": {
+                    "type": "boolean",
+                    "default": false,
                     "description": "Use dedicated clangd server instances for each project in the workspace"
-
                 },
                 "clangd.multiProject.strategy": {
                     "type": "string",
