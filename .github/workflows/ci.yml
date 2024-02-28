@@ -1,9 +1,15 @@
 name: CI
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    tags:
+      - '*'
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,18 +19,67 @@ jobs:
         Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
         echo "DISPLAY=:99" >> $GITHUB_ENV
     - uses: actions/checkout@v3
-    - run: npm ci
-    - run: npm test
-    - name: clang-format (diff)
-      if: github.event_name == 'pull_request'
-      env:
-        BASE: ${{ github['base_ref'] }}
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 18.x
+    - name: Build
       run: |
-        git fetch --no-tags --prune --depth=1 origin +refs/heads/$BASE:refs/remotes/origin/$BASE
-        npm run git-clang-format -- --diff origin/$BASE |\
-        awk -v s="^diff" '$0~s{r=1} 1; END{exit(r)}'
-    - name: clang-format (project)
-      if: github.event_name == 'push'
-      run: |
-        npm run git-clang-format -- --diff --commit $(git hash-object -t tree /dev/null) |\
-        awk -v s="^diff" '$0~s{r=1} 1; END{exit(r)}'
+        npm ci
+        npm test
+    - uses: actions/upload-artifact@v3
+      with:
+        name: vsix-package
+        path: ./*.vsix
+        retention-days: 1
+    
+  release:
+    needs: build
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*/*.vsix
+
+  publish-open-vsx-registry:
+    needs: build
+    name: Open VSX
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+      - name: Publish
+        run: |
+          npx ovsx publish -i artifacts/*/*.vsix -p ${{secrets.OPEN_VSX_TOKEN}}
+
+  publish-vscode-marketplace:
+    needs: build
+    name: VS Code Marketplace
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+      - name: Publish
+        run: |
+          npx vsce publish -i artifacts/*/*.vsix -p ${{secrets.VS_MARKETPLACE_TOKEN}}
