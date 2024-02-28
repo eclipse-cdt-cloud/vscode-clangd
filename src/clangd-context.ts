@@ -43,7 +43,7 @@ export function isClangdDocument(document: vscode.TextDocument) {
   return vscode.languages.match(clangdDocumentSelector, document);
 }
 
-class ClangdLanguageClient extends vscodelc.LanguageClient {
+export class ClangdLanguageClient extends vscodelc.LanguageClient {
 
   // Override the default implementation for failed requests. The default
   // behavior is just to log failures in the output panel, however output panel
