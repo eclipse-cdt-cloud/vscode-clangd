@@ -28,6 +28,7 @@ jobs:
       run: |
         npm ci
         npm test
+        npm run package
     - uses: actions/upload-artifact@v3
       with:
         name: vsix-package
