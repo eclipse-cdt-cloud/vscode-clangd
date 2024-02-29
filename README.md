@@ -31,6 +31,10 @@ Note that at the moment this project should be rather seen as a proof-of-concept
 for `vscode-clangd`. The focus has been set on providing the core clangd LSP functionality. Customizations on top like the `Type Hierarchy View`,
 `Memory Usage` etc. haven been disabled for now and do not working in `clangd-vscode-multi-project`.
 
+## Releases
+
+- [0.1.0 - 29/02/2024](https://github.com/eclipse-cdt-cloud/vscode-clangd/releases/tag/v0.1.0) (based on [vscode-clangd@0.1.26](https://github.com/clangd/vscode-clangd/releases/tag/0.1.26))  
+
 ## Setup
 
 ### `clangd` server

@@ -2,7 +2,7 @@
     "name": "vscode-clangd-cdtcloud",
     "displayName": "vscode-clangd-cdtcloud",
     "description": "Fork of the clangd VS Code extension for C/C++ completion, navigation, and insights, plus better support for multiple projects in a single workspace.",
-    "version": "0.1.26+1",
+    "version": "0.1.0",
     "publisher": "eclipse-cdt",
     "license": "MIT",
     "homepage": "https://eclipse.dev/cdt-cloud",
