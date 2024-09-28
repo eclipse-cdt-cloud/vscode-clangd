@@ -110,11 +110,9 @@ export class ClangdContext implements vscode.Disposable {
     const oldActiveProject = this._activeProjectOverride;
     this._activeProjectOverride = project;
     if (oldActiveProject) {
-      this.disposeClient(oldActiveProject.id);
       this.createClient(oldActiveProject, this.serverOptions!)
     }
     if (project) {
-      this.disposeClient(project.id);
       this.createClient(project, this.serverOptions!)
     }
   }
@@ -162,7 +160,6 @@ export class ClangdContext implements vscode.Disposable {
           this.clients.get(this._activeProjectOverride.id)?.dispose();
           this._activeProjectOverride = undefined;
         } else if (change.updated?.includes(this._activeProjectOverride)) {
-          this.clients.get(this._activeProjectOverride.id)?.dispose();
           this.createClient(this._activeProjectOverride, this.serverOptions!);
         }
       })
@@ -317,7 +314,7 @@ export class ClangdContext implements vscode.Disposable {
       }
       this.disposeClient(activeProject?.id ?? fallbackProjectId);
       this.createClient(activeProject, serverOptions);
-    } else {
+    } else if (!this.clients.has(project.id)) {
       this.createClient(project, serverOptions);
     }
   }
@@ -331,7 +328,9 @@ export class ClangdContext implements vscode.Disposable {
         // max restart count
         config.get<boolean>('restartAfterCrash') ? /*default*/ 4 : 0);
     client.registerFeature(new EnableEditsNearCursorFeature);
-    this.clients.set(project?.id ?? fallbackProjectId, client);
+    let client_key = project?.id ?? fallbackProjectId;
+    this.clients.get(client_key)?.dispose();
+    this.clients.set(client_key, client);
     client.start()
     return client;
   }
