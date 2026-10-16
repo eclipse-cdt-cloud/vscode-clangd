@@ -62,6 +62,7 @@ export class ClangdContextManager implements vscode.Disposable {
   // Set while the session starts: until clangd is located and the session
   // is set up.
   private starting: Promise<void>|undefined;
+  private restarting: Promise<void>|undefined;
   private active: ClangdContext|undefined;
   private multiProjectEnabled = false;
   // The clangd executable, set once a multi-project session is set up.
@@ -85,6 +86,9 @@ export class ClangdContextManager implements vscode.Disposable {
   private readonly onDidRemoveContextEmitter =
       new vscode.EventEmitter<ClangdContext>();
   readonly onDidRemoveContext = this.onDidRemoveContextEmitter.event;
+  // Fired when a client is added or removed, or starts or stops running.
+  private readonly onDidChangeClientsEmitter = new vscode.EventEmitter<void>();
+  readonly onDidChangeClients = this.onDidChangeClientsEmitter.event;
 
   constructor(private readonly globalStoragePath: string,
               private readonly outputChannel: vscode.LogOutputChannel) {
@@ -126,6 +130,13 @@ export class ClangdContextManager implements vscode.Disposable {
            this.contexts.some(c => c.clientIsStarting());
   }
 
+  // Resolves once no start or restart of the session is in progress.
+  async ready(): Promise<void> {
+    let busy: Promise<void>|undefined;
+    while ((busy = this.starting ?? this.restarting))
+      await busy.catch(() => {});
+  }
+
   async start(): Promise<void> {
     if (this.session)
       return;
@@ -153,29 +164,14 @@ export class ClangdContextManager implements vscode.Disposable {
   async restart(uri?: vscode.Uri): Promise<void> {
     if (uri && this.multiProject && this.session)
       return this.restartProject(uri);
-    // A restart requested while the session starts is served by that start,
-    // unless the start was abandoned (e.g. by a shutdown) or
-    // clangd.enablePerFolderServer changed meanwhile.
-    if (this.starting) {
-      await this.starting.catch(() => {});
-      if (this.session && this.multiProject === multiProjectSetting())
-        return;
+    const restarting = this.restartAll();
+    this.restarting = restarting;
+    try {
+      await restarting;
+    } finally {
+      if (this.restarting === restarting)
+        this.restarting = undefined;
     }
-    if (this.multiProject !== multiProjectSetting()) {
-      // The client of the default mode registers the server commands as VS
-      // Code commands while it starts. Once it has started, stopping it
-      // unregisters them before the per-project clients register theirs.
-      await this.contextMap.get('')?.clientSettled();
-    } else if (this.startingInDefaultMode()) {
-      return;
-    }
-    // In multi-project mode, the contexts are recreated even if none of their
-    // files is visible.
-    const keys = [...this.contextMap.keys(), ...this.pending.keys()];
-    this.stopSession();
-    await this.start();
-    if (this.multiProject)
-      await this.ensureContexts(keys);
   }
 
   // Stops all clients, or with `uri` in multi-project mode, the client of the
@@ -231,6 +227,35 @@ export class ClangdContextManager implements vscode.Disposable {
     this.serverCommands.dispose();
     this.onDidAddContextEmitter.dispose();
     this.onDidRemoveContextEmitter.dispose();
+    this.onDidChangeClientsEmitter.dispose();
+  }
+
+  private async restartAll() {
+    // A restart requested while the session starts is served by that start,
+    // unless the start was abandoned (e.g. by a shutdown) or
+    // clangd.enablePerFolderServer changed meanwhile.
+    if (this.starting) {
+      await this.starting.catch(() => {});
+      if (this.session && this.multiProject === multiProjectSetting())
+        return;
+    }
+    if (this.multiProject !== multiProjectSetting()) {
+      // The client of the default mode registers the server commands as VS
+      // Code commands while it starts. Once it has started, stopping it
+      // unregisters them before the per-project clients register theirs.
+      await this.contextMap.get('')?.clientSettled();
+    } else if (this.startingInDefaultMode()) {
+      return;
+    }
+    // In multi-project mode, the contexts are recreated even if none of their
+    // files is visible.
+    const keys = [...this.contextMap.keys(), ...this.pending.keys()];
+    this.stopSession();
+    await this.start();
+    if (this.multiProject)
+      await Promise.all(
+          this.projects.filter(p => keys.includes(projectKey(p.uri)))
+              .map(p => this.ensureContext(p.uri)));
   }
 
   private async startSession(session: vscode.Disposable[]) {
@@ -312,13 +337,6 @@ export class ClangdContextManager implements vscode.Disposable {
     await Promise.all(vscode.window.visibleTextEditors
                           .filter(e => isClangdDocument(e.document))
                           .map(e => this.ensureContext(e.document.uri)));
-  }
-
-  // Ensures there is a context for each project of `keys`.
-  private async ensureContexts(keys: readonly string[]) {
-    await Promise.all(
-        this.projects.filter(p => keys.includes(projectKey(p.uri)))
-            .map(p => this.ensureContext(p.uri)));
   }
 
   private async restartProject(uri: vscode.Uri) {
@@ -403,6 +421,8 @@ export class ClangdContextManager implements vscode.Disposable {
 
   private addContext(key: string, context: ClangdContext) {
     this.contextMap.set(key, context);
+    context.subscriptions.push(context.client.onDidChangeState(
+        () => { this.onDidChangeClientsEmitter.fire(); }));
     if (!this.active)
       this.setActive(context);
     if (this.multiProject)
@@ -420,8 +440,11 @@ export class ClangdContextManager implements vscode.Disposable {
     this.contextMap.delete(key);
     if (this.active === context)
       this.setActive(undefined);
+    const hadClient = context.clientIsStartingOrRunning();
     this.onDidRemoveContextEmitter.fire(context);
     context.dispose();
+    if (hadClient)
+      this.onDidChangeClientsEmitter.fire();
     return true;
   }
 

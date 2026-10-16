@@ -106,14 +106,18 @@ export class MockTextEditor implements vscode.TextEditor {
 // Stands in for a ClangdContext; only what the manager uses.
 export class FakeContext {
   subscriptions: vscode.Disposable[] = [];
-  client = {};
+  private readonly stateEmitter = new vscode.EventEmitter<void>();
+  client = {onDidChangeState: this.stateEmitter.event};
   starting = false;
   started = false;
   disposed = false;
 
   constructor(readonly project: ClangdProject|undefined) {}
 
-  async startClient() { this.started = true; }
+  async startClient() {
+    this.started = true;
+    this.stateEmitter.fire();
+  }
   servesDocument(document: vscode.TextDocument) {
     return !this.project || uriContains(this.project.uri, document.uri);
   }
