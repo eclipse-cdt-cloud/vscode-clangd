@@ -13,6 +13,8 @@ class MockClangdContext implements ClangdContext {
   subscriptions: vscode.Disposable[] = [];
   client = new vscodelc.LanguageClient('', {command: ''}, {});
   manager = {} as ClangdContextManager;
+  project = undefined;
+  workspaceFolder = undefined;
   documentSelector: vscode.DocumentSelector = [];
   clientStarted: Promise<void>|undefined = undefined;
   disposed = false;

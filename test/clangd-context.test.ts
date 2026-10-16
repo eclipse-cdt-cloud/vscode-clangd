@@ -10,6 +10,8 @@ import * as configFileWatcher from '../src/config-file-watcher';
 import * as inactiveRegions from '../src/inactive-regions';
 import * as inlayHints from '../src/inlay-hints';
 
+import {settle} from './mocks';
+
 suite('ClangdContext', () => {
   let sandbox: sinon.SinonSandbox;
   let context: ClangdContext;
@@ -33,9 +35,6 @@ suite('ClangdContext', () => {
   });
 
   teardown(() => { sandbox.restore(); });
-
-  // Resolves once pending promise callbacks have run.
-  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
   // Simulates startClient() with a client that is starting.
   function startClient(): () => void {

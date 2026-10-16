@@ -150,7 +150,10 @@ class TypeHierarchyFeature implements vscodelc.StaticFeature {
     if (this.state === vscodelc.State.Running) {
       vscode.commands.executeCommand('setContext', 'clangd.enableTypeHierarchy',
                                      this.serverSupportsTypeHierarchy);
-    } else if (this.state === vscodelc.State.Stopped) {
+    } else if (this.state === vscodelc.State.Stopped &&
+               !this.context.manager.contexts.some(c => c !== this.context &&
+                                                        c.clientIsRunning())) {
+      // The view stays enabled while another client is running.
       vscode.commands.executeCommand('setContext', 'clangd.enableTypeHierarchy',
                                      false);
     }

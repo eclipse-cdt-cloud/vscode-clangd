@@ -10,6 +10,7 @@ import * as vscodelc from 'vscode-languageclient/node';
 
 import {ClangdContext} from './clangd-context';
 import type {ClangdContextManager} from './clangd-context-manager';
+import {projectName} from './project';
 
 export function activate(context: ClangdContext) {
   const feature = new MemoryUsageFeature();
@@ -34,13 +35,13 @@ export function registerCommands(manager: ClangdContextManager):
             vscode.window.showInformationMessage('clangd is not running');
             return;
           }
-          // One top-level node per client. A client whose request fails,
-          // e.g. because it is stopping, is left out, unless all requests
-          // fail.
+          // One top-level node per client, i.e. per project in multi-project
+          // mode. A client whose request fails, e.g. because it is stopping, is
+          // left out, unless all requests fail.
           const results = await Promise.allSettled(contexts.map(
               async (c) =>
                   convert(await c.client.sendRequest(MemoryUsageRequest, {}),
-                          '<root>')));
+                          c.project ? projectName(c.project) : '<root>')));
           const roots =
               results.flatMap(r => r.status === 'fulfilled' ? [r.value] : []);
           if (!roots.length)

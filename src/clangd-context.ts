@@ -10,6 +10,13 @@ import * as inactiveRegions from './inactive-regions';
 import * as inlayHints from './inlay-hints';
 import * as memoryUsage from './memory-usage';
 import * as openConfig from './open-config';
+import {
+  ClangdProject,
+  projectKey,
+  projectName,
+  projectTraceFile
+} from './project';
+import {SharedServerCommandsFeature} from './server-commands';
 import * as switchSourceHeader from './switch-source-header';
 import * as typeHierarchy from './type-hierarchy';
 
@@ -23,6 +30,16 @@ export const clangdDocumentSelector = [
 
 export function isClangdDocument(document: vscode.TextDocument) {
   return vscode.languages.match(clangdDocumentSelector, document);
+}
+
+// Selects the clangd documents below `root`, in the LSP form the language
+// client expects. A base URI avoids writing the root path into a glob, where
+// Windows path separators and glob metacharacters in the path would break the
+// match.
+export function projectDocumentSelector(root: vscode.Uri):
+    vscodelc.DocumentSelector {
+  return clangdDocumentSelector.map(
+      f => ({...f, pattern: {baseUri: root.toString(), pattern: '**/*'}}));
 }
 
 class ClangdLanguageClient extends vscodelc.LanguageClient {
@@ -86,11 +103,30 @@ export function contextForCommand(manager: ClangdContextManager,
   return context;
 }
 
+// The workspace folder the project's client is locked to: the containing
+// folder if the project is one, otherwise a folder for the project's root.
+function clientWorkspaceFolder(project: ClangdProject,
+                               folder: vscode.WorkspaceFolder|
+                               undefined): vscode.WorkspaceFolder {
+  if (folder && projectKey(folder.uri) === projectKey(project.uri))
+    return folder;
+  return {
+    uri: project.uri,
+    name: projectName(project),
+    index: folder?.index ?? 0
+  };
+}
+
 export class ClangdContext implements vscode.Disposable {
   subscriptions: vscode.Disposable[] = [];
   client: ClangdLanguageClient;
   readonly manager: ClangdContextManager;
-  readonly documentSelector: vscode.DocumentSelector = clangdDocumentSelector;
+  // The project served by this context, undefined unless
+  // clangd.enablePerFolderServer is set.
+  readonly project: ClangdProject|undefined;
+  // The workspace folder containing the project, used as configuration scope.
+  readonly workspaceFolder: vscode.WorkspaceFolder|undefined;
+  readonly documentSelector: vscode.DocumentSelector;
   // Set only by startClient(); resolves once the client has started.
   clientStarted: Promise<void>|undefined;
   // Set only by dispose(). A client disposed while it starts still initializes
@@ -99,17 +135,25 @@ export class ClangdContext implements vscode.Disposable {
 
   static async create(clangdPath: string,
                       outputChannel: vscode.LogOutputChannel,
-                      manager: ClangdContextManager): Promise<ClangdContext> {
+                      manager: ClangdContextManager,
+                      project?: ClangdProject): Promise<ClangdContext> {
+    const workspaceFolder =
+        project && vscode.workspace.getWorkspaceFolder(project.uri);
     return new ClangdContext(
-        manager, await ClangdContext.createClient(clangdPath, outputChannel));
+        manager, project, workspaceFolder,
+        await ClangdContext.createClient(clangdPath, outputChannel, project,
+                                         workspaceFolder));
   }
 
   private static async createClient(clangdPath: string,
-                                    outputChannel: vscode.LogOutputChannel):
+                                    outputChannel: vscode.LogOutputChannel,
+                                    project?: ClangdProject,
+                                    workspaceFolder?: vscode.WorkspaceFolder):
       Promise<ClangdLanguageClient> {
     const useScriptAsExecutable =
         await config.get<boolean>('useScriptAsExecutable');
-    let clangdArguments = await config.get<string[]>('arguments');
+    let clangdArguments =
+        await config.get<string[]>('arguments', workspaceFolder);
     if (useScriptAsExecutable) {
       let quote = (str: string) => { return `"${str}"`; };
       clangdPath = quote(clangdPath)
@@ -121,23 +165,32 @@ export class ClangdContext implements vscode.Disposable {
       command: clangdPath,
       args: clangdArguments,
       options: {
-        cwd: vscode.workspace.rootPath || process.cwd(),
+        cwd:
+            project?.uri.fsPath ?? (vscode.workspace.rootPath || process.cwd()),
         shell: useScriptAsExecutable
       }
     };
     const traceFile = await config.get<string>('trace');
     if (!!traceFile) {
-      const trace = {CLANGD_TRACE: traceFile};
+      // Every clangd writes a trace of its own.
+      const trace = {
+        CLANGD_TRACE: project ? projectTraceFile(traceFile, project) : traceFile
+      };
       clangd.options = {...clangd.options, env: {...process.env, ...trace}};
     }
     const serverOptions: vscodelc.ServerOptions = clangd;
 
     const clientOptions: vscodelc.LanguageClientOptions = {
       // Register the server for c-family and cuda files.
-      documentSelector: clangdDocumentSelector,
+      documentSelector: project ? projectDocumentSelector(project.uri)
+                                : clangdDocumentSelector,
+      // Sets the root of the project's server.
+      workspaceFolder:
+          project && clientWorkspaceFolder(project, workspaceFolder),
       initializationOptions: {
         clangdFileStatus: true,
-        fallbackFlags: await config.get<string[]>('fallbackFlags')
+        fallbackFlags:
+            await config.get<string[]>('fallbackFlags', workspaceFolder)
       },
       outputChannel: outputChannel,
       // Do not switch to output window when clangd returns output.
@@ -238,8 +291,13 @@ export class ClangdContext implements vscode.Disposable {
       },
     };
 
-    const client = new ClangdLanguageClient('Clang Language Server',
-                                            serverOptions, clientOptions);
+    // The id determines the trace setting (clang language server.trace.server)
+    // and is the same for all clients.
+    const client = new ClangdLanguageClient(
+        'clang language server',
+        project ? `Clang Language Server (${projectName(project)})`
+                : 'Clang Language Server',
+        serverOptions, clientOptions);
     client.clientOptions.errorHandler = client.createDefaultErrorHandler(
         // max restart count
         await config.get<boolean>('restartAfterCrash') ? /*default*/ 4 : 0);
@@ -249,8 +307,16 @@ export class ClangdContext implements vscode.Disposable {
   }
 
   private constructor(manager: ClangdContextManager,
+                      project: ClangdProject|undefined,
+                      workspaceFolder: vscode.WorkspaceFolder|undefined,
                       client: ClangdLanguageClient) {
     this.manager = manager;
+    this.project = project;
+    this.workspaceFolder = workspaceFolder;
+    this.documentSelector =
+        project ? client.protocol2CodeConverter.asDocumentSelector(
+                      projectDocumentSelector(project.uri))
+                : clangdDocumentSelector;
     this.client = client;
   }
 
@@ -260,6 +326,15 @@ export class ClangdContext implements vscode.Disposable {
     memoryUsage.activate(this);
     ast.activate(this);
     inactiveRegions.activate(this);
+    if (this.project) {
+      const serverCommands = new SharedServerCommandsFeature(
+          this.manager.serverCommands, this.client);
+      this.client.registerFeature(serverCommands);
+      // The client stops only once it has started, and must not add its
+      // commands meanwhile.
+      this.subscriptions.push(
+          new vscode.Disposable(() => serverCommands.detach()));
+    }
     const watcherActivated = configFileWatcher.activate(this);
     // Assigned synchronously, so that dispose() can wait for the client to
     // finish starting: a client can't be stopped while it is starting.
