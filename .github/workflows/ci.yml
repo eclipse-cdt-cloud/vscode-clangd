@@ -1,9 +1,12 @@
 name: CI
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
+    tags: [ '*' ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,6 +16,9 @@ jobs:
         Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
         echo "DISPLAY=:99" >> $GITHUB_ENV
     - uses: actions/checkout@v7
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
     - run: npm ci
     - run: npm test
     - name: clang-format (diff)
@@ -28,3 +34,57 @@ jobs:
       run: |
         npm run git-clang-format -- --diff --commit $(git hash-object -t tree /dev/null) |\
         awk -v s="^diff" '$0~s{r=1} 1; END{exit(r)}'
+    - run: npm run package
+    - uses: actions/upload-artifact@v4
+      with:
+        name: vsix-package
+        path: ./*.vsix
+        retention-days: 1
+
+  release:
+    needs: build
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: vsix-package
+        path: artifacts
+    - uses: softprops/action-gh-release@v2
+      with:
+        files: artifacts/*.vsix
+
+  publish-open-vsx-registry:
+    needs: build
+    name: Open VSX
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: vsix-package
+        path: artifacts
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+    - name: Publish
+      run: npx ovsx publish -i artifacts/*.vsix -p ${{ secrets.OPEN_VSX_TOKEN }}
+
+  publish-vscode-marketplace:
+    needs: build
+    name: VS Code Marketplace
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: vsix-package
+        path: artifacts
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+    - name: Publish
+      run: npx @vscode/vsce publish -i artifacts/*.vsix -p ${{ secrets.VS_MARKETPLACE_TOKEN }}

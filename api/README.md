@@ -47,6 +47,10 @@ dependency: consumers already depend on it as VS Code extensions.
 
 ## API version 2
 
+API version 2 is provided by the Eclipse CDT Cloud fork of this extension,
+whose extension id is `eclipse-cdt.vscode-clangd-cdtcloud`. Use that id instead
+of `llvm-vs-code-extensions.vscode-clangd` to get it.
+
 Version 2 adds access to the clients and projects of the multi-project mode
 (`clangd.enablePerFolderServer`), where every project is served by its own clangd
 instance. In the default mode, there is a single client and no projects.
