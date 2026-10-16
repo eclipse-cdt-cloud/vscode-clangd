@@ -1,8 +1,36 @@
 # Change Log
 
-## Unreleased
+## Version 0.2.0 (Eclipse CDT Cloud fork)
 
+Based on vscode-clangd 0.6.0 and its master branch up to 58df17e. The entries
+below this one are those of vscode-clangd.
+
+* Add the opt-in setting `clangd.enablePerFolderServer`, which runs a separate
+  clangd instance for each workspace folder, or for each project contributed by
+  other extensions. In this mode, folder-level clangd settings apply to the
+  folder's instance, and each instance logs to its own output channel.
+* Add API version 2, which gives access to the language clients and lets other
+  extensions contribute projects.
+* Fix the error message for failed `workspace/executeCommand` requests, e.g. of
+  code actions, which was never shown.
 * Increase the minimum supported VS Code version from 1.75 to 1.91.
+
+The multi-project support of the fork's version 0.1.0 is replaced, which breaks
+the following:
+
+* The settings `clangd.multiProject.enabled`, `clangd.multiProject.strategy`
+  and `clangd.multiProject.status` are removed. Use
+  `clangd.enablePerFolderServer` instead, otherwise a single clangd instance
+  serves all folders. The project of the active file is shown in the clangd
+  status bar item.
+* The `cmake.build` strategy, which made every folder with a
+  `build/compile_commands.json` a project, and the `clangd.projectResolution`
+  contribution point for custom strategies are removed. Extensions can
+  contribute projects through `registerProjectProvider` of API version 2
+  instead.
+* The extension no longer returns a `ProjectService` on activation, but the API
+  described in
+  [api/README.md](https://github.com/eclipse-cdt-cloud/vscode-clangd/blob/main/api/README.md).
 
 ## Version 0.6.0: May 21, 2026
 

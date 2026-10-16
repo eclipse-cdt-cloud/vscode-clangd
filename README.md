@@ -1,4 +1,4 @@
-# clangd
+# clangd (Eclipse CDT Cloud Fork)
 
 [clangd](https://clangd.llvm.org) helps developers write, understand and
 improve C/C++ code by providing:
@@ -12,6 +12,27 @@ improve C/C++ code by providing:
  - simple refactorings
 
 Full documentation for clangd is at [clangd.llvm.org](https://clangd.llvm.org).
+
+## Eclipse CDT Cloud Fork
+
+This is a fork of the [vscode-clangd](https://github.com/clangd/vscode-clangd)
+extension, maintained by [Eclipse CDT Cloud](https://eclipse.dev/cdt-cloud). It
+adds an opt-in mode, `clangd.enablePerFolderServer`, in which every workspace
+folder, or every project contributed through the API, e.g. a sub-folder, is
+served by its own clangd instance: see
+[Per-Project Clangd Instances](#per-project-clangd-instances). Otherwise, the
+extension behaves like vscode-clangd.
+
+The extension id is `eclipse-cdt.vscode-clangd-cdtcloud`. It contributes the
+same commands and settings as vscode-clangd, so only one of the two extensions
+should be enabled.
+
+### Releases
+
+| Version | Based on |
+|---|---|
+| [0.2.0](https://github.com/eclipse-cdt-cloud/vscode-clangd/releases/tag/v0.2.0) | [vscode-clangd 0.6.0](https://github.com/clangd/vscode-clangd/releases/tag/0.6.0) and its master branch up to [58df17e](https://github.com/clangd/vscode-clangd/commit/58df17e) |
+| [0.1.0](https://github.com/eclipse-cdt-cloud/vscode-clangd/releases/tag/v.0.1.0) | [vscode-clangd 0.1.26](https://github.com/clangd/vscode-clangd/releases/tag/0.1.26) |
 
 ## Setup
 
@@ -161,5 +182,5 @@ clangd is part of the [LLVM project](https://llvm.org).
 
 If you'd like to help out, reach out to clangd-dev@lists.llvm.org.
 
-If you've found a bug in this extension, please file it at https://github.com/clangd/vscode-clangd/issues.
+If you've found a bug in this extension, please file it at https://github.com/eclipse-cdt-cloud/vscode-clangd/issues.
 If you've found a bug in clangd, please file at https://github.com/clangd/clangd/issues.
