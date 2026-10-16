@@ -49,7 +49,7 @@ export class InactiveRegionsFeature implements vscodelc.StaticFeature {
              documentSelector: vscodelc.DocumentSelector|undefined) {
     const serverCapabilities: vscodelc.ServerCapabilities&
         {inactiveRegionsProvider?: any} = capabilities;
-    if (serverCapabilities.inactiveRegionsProvider) {
+    if (serverCapabilities.inactiveRegionsProvider && !this.context.disposed) {
       this.context.subscriptions.push(
           vscode.window.onDidChangeVisibleTextEditors(async (editors) => {
             if (!this.decorationType) {

@@ -57,6 +57,8 @@ class InlayHintsFeature implements vscodelc.StaticFeature {
         'setContext', 'clangd.inlayHints.supported',
         serverCapabilities.clangdInlayHintsProvider ||
             serverCapabilities.inlayHintProvider);
+    if (this.context.disposed)
+      return;
     if (!this.commandRegistered) {
       // The command provides a quick way to toggle inlay hints
       // (key-bindable).

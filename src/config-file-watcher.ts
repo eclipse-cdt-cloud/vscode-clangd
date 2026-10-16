@@ -26,6 +26,8 @@ class ConfigFileWatcherFeature implements vscodelc.StaticFeature {
             .compilationDatabase?.automaticReload) {
       return;
     }
+    if (this.context.disposed)
+      return;
     this.context.subscriptions.push(new ConfigFileWatcher(this.context));
   }
   getState(): vscodelc.FeatureState { return {kind: 'static'}; }

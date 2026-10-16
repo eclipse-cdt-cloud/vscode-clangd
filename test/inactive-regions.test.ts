@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import * as vscodelc from 'vscode-languageclient/node';
 
 import {ClangdContext} from '../src/clangd-context';
+import {ClangdContextManager} from '../src/clangd-context-manager';
 import * as config from '../src/config';
 import * as inactiveRegions from '../src/inactive-regions';
 
@@ -11,6 +12,10 @@ import * as mocks from './mocks';
 class MockClangdContext implements ClangdContext {
   subscriptions: vscode.Disposable[] = [];
   client = new vscodelc.LanguageClient('', {command: ''}, {});
+  manager = {} as ClangdContextManager;
+  documentSelector: vscode.DocumentSelector = [];
+  clientStarted: Promise<void>|undefined = undefined;
+  disposed = false;
 
   visibleClangdEditors: vscode.TextEditor[] = [];
 
@@ -18,9 +23,13 @@ class MockClangdContext implements ClangdContext {
 
   async startClient() { throw new Error('Method not implemented.'); }
 
+  servesDocument(_document: vscode.TextDocument) { return true; }
+
   clientIsStarting() { return false; }
 
   clientIsRunning() { return true; }
+
+  async clientSettled() {}
 
   dispose() { throw new Error('Method not implemented.'); }
 }
