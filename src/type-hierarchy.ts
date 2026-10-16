@@ -8,11 +8,20 @@
 import * as vscode from 'vscode';
 import * as vscodelc from 'vscode-languageclient/node';
 
-import {ClangdContext} from './clangd-context';
+import {ClangdContext, contextForCommand} from './clangd-context';
+import type {ClangdContextManager} from './clangd-context-manager';
 
 export function activate(context: ClangdContext) {
   const feature = new TypeHierarchyFeature(context);
   context.client.registerFeature(feature);
+}
+
+// Creates the type hierarchy view and its commands, shared by all contexts.
+export function registerCommands(manager: ClangdContextManager):
+    vscode.Disposable[] {
+  const subscriptions: vscode.Disposable[] = [];
+  new TypeHierarchyProvider(manager, subscriptions);
+  return subscriptions;
 }
 
 export namespace TypeHierarchyDirection {
@@ -105,7 +114,6 @@ class TypeHierarchyFeature implements vscodelc.StaticFeature {
 
   constructor(context: ClangdContext) {
     this.context = context;
-    new TypeHierarchyProvider(context);
     context.subscriptions.push(context.client.onDidChangeState(stateChange => {
       this.state = stateChange.newState;
       this.recomputeEnableTypeHierarchy();
@@ -152,7 +160,8 @@ class TypeHierarchyFeature implements vscodelc.StaticFeature {
 class TypeHierarchyProvider implements
     vscode.TreeDataProvider<TypeHierarchyItem> {
 
-  private client: vscodelc.LanguageClient;
+  // The client that produced the current root, used to resolve and navigate.
+  private client?: vscodelc.BaseLanguageClient;
 
   private _onDidChangeTreeData =
       new vscode.EventEmitter<TypeHierarchyItem|null>();
@@ -166,30 +175,36 @@ class TypeHierarchyProvider implements
   // May be different from the root.
   private startingItem!: TypeHierarchyItem;
 
-  constructor(context: ClangdContext) {
-    this.client = context.client;
-
-    context.subscriptions.push(vscode.commands.registerTextEditorCommand(
+  constructor(private readonly manager: ClangdContextManager,
+              subscriptions: vscode.Disposable[]) {
+    subscriptions.push(vscode.commands.registerTextEditorCommand(
         'clangd.typeHierarchy', this.reveal, this));
-    context.subscriptions.push(vscode.commands.registerCommand(
+    subscriptions.push(vscode.commands.registerCommand(
         'clangd.typeHierarchy.close', this.close, this));
-    context.subscriptions.push(vscode.commands.registerCommand(
+    subscriptions.push(vscode.commands.registerCommand(
         'clangd.typeHierarchy.gotoItem', this.gotoItem, this));
-    context.subscriptions.push(vscode.commands.registerCommand(
+    subscriptions.push(vscode.commands.registerCommand(
         'clangd.typeHierarchy.viewParents',
         () => this.setDirection(TypeHierarchyDirection.Parents)));
-    context.subscriptions.push(vscode.commands.registerCommand(
+    subscriptions.push(vscode.commands.registerCommand(
         'clangd.typeHierarchy.viewChildren',
         () => this.setDirection(TypeHierarchyDirection.Children)));
 
     this.treeView = vscode.window.createTreeView('clangd.typeHierarchyView',
                                                  {treeDataProvider: this});
-    context.subscriptions.push(this.treeView);
+    subscriptions.push(this.treeView);
+    // The client of a removed context no longer takes requests.
+    subscriptions.push(manager.onDidRemoveContext((context) => {
+      if (context.client === this.client)
+        this.close();
+    }));
     // Show children by default.
     this.direction = TypeHierarchyDirection.Children;
   }
 
   public async gotoItem(item: TypeHierarchyItem) {
+    if (!this.client)
+      return;
     const uri = vscode.Uri.parse(item.uri);
     const range =
         this.client.protocol2CodeConverter.asRange(item.selectionRange);
@@ -242,7 +257,7 @@ class TypeHierarchyProvider implements
 
   public async getChildren(element
                            ?: TypeHierarchyItem): Promise<TypeHierarchyItem[]> {
-    if (!this.root)
+    if (!this.root || !this.client)
       return [];
     if (!element)
       return [this.root];
@@ -291,14 +306,19 @@ class TypeHierarchyProvider implements
   }
 
   private async reveal(editor: vscode.TextEditor) {
+    const context = contextForCommand(this.manager, editor.document.uri);
+    if (!context)
+      return;
+    const client = context.client;
+
     // This makes the type hierarchy view visible by causing the condition
     // "when": "extension.vscode-clangd.typeHierarchyVisible" from
     // package.json to evaluate to true.
     vscode.commands.executeCommand('setContext', 'clangd.typeHierarchyVisible',
                                    true);
 
-    const item = await this.client.sendRequest(TypeHierarchyRequest.type, {
-      ...this.client.code2ProtocolConverter.asTextDocumentPositionParams(
+    const item = await client.sendRequest(TypeHierarchyRequest.type, {
+      ...client.code2ProtocolConverter.asTextDocumentPositionParams(
           editor.document, editor.selection.active),
       // Resolve up to 5 initial levels. Any additional levels will be resolved
       // on the fly if the user expands the tree item.
@@ -311,7 +331,11 @@ class TypeHierarchyProvider implements
       // to Parents view.
       direction: TypeHierarchyDirection.Both
     });
+    // The view closed meanwhile because the context was removed.
+    if (context.disposed)
+      return;
     if (item) {
+      this.client = client;
       this.startingItem = item;
       this.root = this.computeRoot();
 
@@ -345,6 +369,7 @@ class TypeHierarchyProvider implements
                                    false);
 
     this.root = undefined;
+    this.client = undefined;
     this._onDidChangeTreeData.fire(null);
   }
 }
