@@ -48,8 +48,12 @@ recommend to run `npm run format` before sending a patch.
 
 To create a new release, create a commit that:
 
-- increases the version number in `package.json`
-- updates `CHANGELOG.md` to cover changes since the last release
+- increases the version number in `package.json` and `package-lock.json`
+- updates the releases table in `README.md`, including the vscode-clangd
+  version and commit the release is based on
+- adds an entry for the release to `CHANGELOG.md`
 
-Our CI will recognize the commit and publish new versions to the VSCode
-Marketplace and the alternative OpenVSX registry.
+Once that commit is on `main`, push a tag `v<version>` for it. Our CI checks
+that the tag matches the version, builds the tagged commit, creates a GitHub
+release with the `.vsix` package and publishes it to the VSCode Marketplace and
+the alternative OpenVSX registry.
