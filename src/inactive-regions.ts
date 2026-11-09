@@ -50,26 +50,28 @@ export class InactiveRegionsFeature implements vscodelc.StaticFeature {
     const serverCapabilities: vscodelc.ServerCapabilities&
         {inactiveRegionsProvider?: any} = capabilities;
     if (serverCapabilities.inactiveRegionsProvider) {
-      if (config.get<boolean>('inactiveRegions.useBackgroundHighlight')) {
-        this.decorationType = vscode.window.createTextEditorDecorationType({
-          isWholeLine: true,
-          backgroundColor:
-              new vscode.ThemeColor('clangd.inactiveRegions.background'),
-        });
-      } else {
-        this.decorationType = vscode.window.createTextEditorDecorationType({
-          isWholeLine: true,
-          opacity: config.get<number>('inactiveRegions.opacity').toString()
-        });
-      }
       this.context.subscriptions.push(
-          vscode.window.onDidChangeVisibleTextEditors(
-              (editors) => editors.forEach(
-                  (e) => this.applyHighlights(e.document.fileName))));
+          vscode.window.onDidChangeVisibleTextEditors(async (editors) => {
+            if (!this.decorationType) {
+              // If the decoration type is not yet initialized, update it
+              await this.updateDecorationType();
+            }
+            editors.forEach((e) => this.applyHighlights(e.document.fileName))
+          }));
       this.context.subscriptions.push(
-          vscode.workspace.onDidChangeConfiguration((conf) => {
-            if (!conf.affectsConfiguration('workbench.colorTheme'))
+          vscode.workspace.onDidChangeConfiguration(async (conf) => {
+            const inactiveSettingsChanged =
+                conf.affectsConfiguration(
+                    'clangd.inactiveRegions.useBackgroundHighlight',
+                    this.context.workspaceFolder) ||
+                conf.affectsConfiguration('clangd.inactiveRegions.opacity',
+                                          this.context.workspaceFolder);
+            if (!(conf.affectsConfiguration('workbench.colorTheme') ||
+                  inactiveSettingsChanged))
               return;
+            if (inactiveSettingsChanged) {
+              await this.updateDecorationType();
+            }
             vscode.window.visibleTextEditors.forEach((e) => {
               if (!this.decorationType)
                 return;
@@ -90,6 +92,25 @@ export class InactiveRegionsFeature implements vscodelc.StaticFeature {
     this.applyHighlights(filePath);
   }
 
+  async updateDecorationType() {
+    this.decorationType?.dispose();
+    if (await config.get<boolean>('inactiveRegions.useBackgroundHighlight',
+                                  this.context.workspaceFolder)) {
+      this.decorationType = vscode.window.createTextEditorDecorationType({
+        isWholeLine: true,
+        backgroundColor:
+            new vscode.ThemeColor('clangd.inactiveRegions.background'),
+      });
+    } else {
+      this.decorationType = vscode.window.createTextEditorDecorationType({
+        isWholeLine: true,
+        opacity: (await config.get<number>('inactiveRegions.opacity',
+                                           this.context.workspaceFolder))
+                     .toString()
+      });
+    }
+  }
+
   applyHighlights(filePath: string) {
     const ranges = this.files.get(filePath);
     if (!ranges)
@@ -104,5 +125,8 @@ export class InactiveRegionsFeature implements vscodelc.StaticFeature {
   }
 
   getState(): vscodelc.FeatureState { return {kind: 'static'}; }
-  dispose() {}
+
+  // clears inactive region decorations on disposal so they don't persist after
+  // extension is deactivated
+  clear() { this.decorationType?.dispose(); }
 }

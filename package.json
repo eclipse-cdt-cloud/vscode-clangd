@@ -2,13 +2,13 @@
     "name": "vscode-clangd-cdtcloud",
     "displayName": "vscode-clangd-cdtcloud",
     "description": "Fork of the clangd VS Code extension for C/C++ completion, navigation, and insights, plus better support for multiple projects in a single workspace.",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "publisher": "eclipse-cdt",
     "license": "MIT",
     "homepage": "https://eclipse.dev/cdt-cloud",
     "icon": "icon.png",
     "engines": {
-        "vscode": "^1.65.0"
+        "vscode": "^1.91.0"
     },
     "categories": [
         "Programming Languages",
@@ -27,59 +27,54 @@
         "onLanguage:cpp",
         "onLanguage:cuda-cpp",
         "onLanguage:objective-c",
-        "onLanguage:objective-cpp",
-        "onCommand:clangd.activate",
-        "onCommand:clangd.install",
-        "onCommand:clangd.update"
+        "onLanguage:objective-cpp"
     ],
     "main": "./out/bundle",
     "scripts": {
-        "esbuild": "esbuild ./src/extension.ts --bundle --outfile=out/bundle.js --external:vscode --format=cjs --platform=node",
+        "esbuild": "esbuild ./src/extension.ts --bundle --outfile=out/bundle.js --external:@aws-sdk/client-s3 --external:vscode --format=cjs --platform=node",
         "vscode:prepublish": "npm run check-ts && npm run esbuild -- --minify --keep-names",
         "compile": "npm run esbuild -- --sourcemap",
         "check-ts": "tsc -noEmit -p ./",
         "format": "clang-format -i --glob=\"{src,test}/*.ts\"",
         "test-compile": "tsc -p ./ && npm run compile",
         "test": "npm run test-compile && node ./out/test/index.js",
-        "package": "vsce package --baseImagesUrl https://raw.githubusercontent.com/eclipsesource/eclipse-cdt-cloud/vscode-clangd/",
-        "publish": "vsce publish --baseImagesUrl https://raw.githubusercontent.com/eclipsesource/eclipse-cdt-cloud/vscode-clangd/",
-        "publish-openvsx": "ovsx publish --baseImagesUrl https://raw.githubusercontent.com/eclipsesource/eclipse-cdt-cloud/vscode-clangd/",
+        "package": "vsce package --baseImagesUrl https://raw.githubusercontent.com/eclipse-cdt-cloud/vscode-clangd/main/",
+        "publish": "vsce publish --baseImagesUrl https://raw.githubusercontent.com/eclipse-cdt-cloud/vscode-clangd/main/",
+        "publish-openvsx": "ovsx publish --baseImagesUrl https://raw.githubusercontent.com/eclipse-cdt-cloud/vscode-clangd/main/",
+        "package-pre-release": "vsce package --pre-release --baseImagesUrl https://raw.githubusercontent.com/eclipse-cdt-cloud/vscode-clangd/main/",
+        "publish-pre-release": "vsce publish --pre-release --baseImagesUrl https://raw.githubusercontent.com/eclipse-cdt-cloud/vscode-clangd/main/",
+        "publish-openvsx-pre-release": "ovsx publish --pre-release --baseImagesUrl https://raw.githubusercontent.com/eclipse-cdt-cloud/vscode-clangd/main/",
         "git-clang-format": "git-clang-format --extensions=ts"
     },
     "dependencies": {
-        "@clangd/install": "0.1.17",
-        "abort-controller": "^3.0.0",
-        "vscode-languageclient": "8.0.2"
+        "@clangd/install": "0.1.20",
+        "vscode-languageclient": "^11.0.0"
     },
     "devDependencies": {
-        "@types/glob": "^7.1.1",
-        "@types/mocha": "^7.0.2",
-        "@types/node": "^6.0.40",
-        "@types/sinon": "^10.0.16",
-        "@vscode/vsce":"^2.24.0",
-        "@types/vscode": "1.65.0",
-        "clang-format": "^1.7.0",
-        "esbuild": "^0.14.13",
-        "glob": "^7.1.4",
-        "mocha": "^9.2.0",
-        "ovsx": "^0.3.0",
-        "sinon": "^15.2.0",
-        "typescript": "^4.5.5",
-        "vscode-test": "^1.3.0"
+        "@types/glob": "^9.0.0",
+        "@types/mocha": "^10.0.7",
+        "@types/node": "^26.6.6",
+        "@types/sinon": "^22.0.2",
+        "@types/vscode": "^1.91.0",
+        "@vscode/test-electron": "^3.1.0",
+        "@vscode/vsce": "^4.1.0",
+        "clang-format": "^1.8.0",
+        "esbuild": "^0.28.2",
+        "glob": "^14.0.3",
+        "mocha": "^12.0.3",
+        "ovsx": "^1.3.0",
+        "sinon": "^22.1.0",
+        "typescript": "^7.0.2"
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/clangd/vscode-clangd.git"
+        "url": "https://github.com/eclipse-cdt-cloud/vscode-clangd.git"
     },
     "qna": "marketplace",
     "capabilities": {
         "untrustedWorkspaces": {
-            "supported": "limited",
-            "description": "In restricted mode clangd.path and clangd.arguments are not respected.",
-            "restrictedConfigurations": [
-                "clangd.path",
-                "clangd.arguments"
-            ]
+            "supported": false,
+            "description": "Clangd isn't safe to run on untrusted code as it embeds clang as a parser. Parsing source files as one navigates a code base, carries the risk of being exploited."
         }
     },
     "contributes": {
@@ -103,16 +98,24 @@
                     "scope": "machine-overridable",
                     "description": "The path to clangd executable, e.g.: /usr/bin/clangd."
                 },
+                "clangd.useScriptAsExecutable": {
+                    "type": "boolean",
+                    "default": false,
+                    "scope": "machine-overridable",
+                    "description": "Allows the path to be a script e.g.: clangd.sh."
+                },
                 "clangd.arguments": {
                     "type": "array",
                     "default": [],
                     "items": {
                         "type": "string"
                     },
+                    "scope": "resource",
                     "description": "Arguments for clangd server."
                 },
                 "clangd.trace": {
                     "type": "string",
+                    "scope": "resource",
                     "description": "Names a file that clangd should log a performance trace to, in chrome trace-viewer JSON format."
                 },
                 "clangd.semanticHighlighting": {
@@ -127,16 +130,19 @@
                     "items": {
                         "type": "string"
                     },
+                    "scope": "resource",
                     "description": "Extra clang flags used to parse files when no compilation database is found."
                 },
                 "clangd.serverCompletionRanking": {
                     "type": "boolean",
                     "default": true,
+                    "scope": "resource",
                     "description": "Always rank completion items on the server as you type. This produces more accurate results at the cost of higher latency than client-side filtering."
                 },
                 "clangd.restartAfterCrash": {
                     "type": "boolean",
                     "default": true,
+                    "scope": "resource",
                     "description": "Auto restart clangd (up to 4 times) if it crashes."
                 },
                 "clangd.checkUpdates": {
@@ -147,7 +153,8 @@
                 "clangd.onConfigChanged": {
                     "type": "string",
                     "default": "prompt",
-                    "description": "What to do when clangd configuration files are changed. Ignored for clangd 12+, which can reload such files itself.",
+                    "scope": "resource",
+                    "description": "What to do when clangd configuration files are changed. Ignored for clangd 12+, which can reload such files itself; however, this can be overridden with clangd.onConfigChangedForceEnable.",
                     "enum": [
                         "prompt",
                         "restart",
@@ -159,6 +166,12 @@
                         "Do nothing"
                     ]
                 },
+                "clangd.onConfigChangedForceEnable": {
+                    "type": "boolean",
+                    "default": false,
+                    "scope": "resource",
+                    "description": "Force enable of \"On Config Changed\" option regardless of clangd version."
+                },
                 "clangd.detectExtensionConflicts": {
                     "type": "boolean",
                     "default": true,
@@ -167,27 +180,37 @@
                 "clangd.inactiveRegions.useBackgroundHighlight": {
                     "type": "boolean",
                     "default": false,
+                    "scope": "resource",
                     "description": "Use a background highlight rather than opacity to identify inactive preprocessor regions."
                 },
                 "clangd.inactiveRegions.opacity": {
                     "type": "number",
                     "default": 0.55,
+                    "scope": "resource",
                     "description": "Opacity of inactive regions (used only if clangd.inactiveRegions.useBackgroundHighlight=false)"
                 },
-                "clangd.multiProject.enabled": {
+                "clangd.enableCodeCompletion": {
+                    "type": "boolean",
+                    "default": true,
+                    "scope": "resource",
+                    "description": "Enable code completion provided by the language server"
+                },
+                "clangd.enableHover": {
+                    "type": "boolean",
+                    "default": true,
+                    "scope": "resource",
+                    "description": "Enable hovers provided by the language server"
+                },
+                "clangd.enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable clangd language server features"
+                },
+                "clangd.enablePerFolderServer": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Use dedicated clangd server instances for each project in the workspace"
-                },
-                "clangd.multiProject.strategy": {
-                    "type": "string",
-                    "default": "workspaceFolders",
-                    "description": "The strategy used for identifying projects"
-                },
-                "clangd.multiProject.status": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Flag to enable/disable the project status bar"
+                    "scope": "window",
+                    "markdownDescription": "Run a separate clangd instance for each workspace folder. When disabled (default), a single clangd instance handles all folders. Extensions can contribute projects through the API, e.g. sub-folders, which then take the place of the folders. An instance starts when one of its files is shown in an editor. Files outside all projects are not served. Folder-level values of the clangd settings take effect only in this mode."
                 }
             }
         },
@@ -227,6 +250,11 @@
                 "command": "clangd.restart",
                 "category": "clangd",
                 "title": "Restart language server"
+            },
+            {
+                "command": "clangd.shutdown",
+                "category": "clangd",
+                "title": "Shutdown language server"
             },
             {
                 "command": "clangd.typeHierarchy",
@@ -304,12 +332,12 @@
                 "command": "clangd.switchheadersource",
                 "key": "Alt+o",
                 "mac": "Alt+cmd+o",
-                "when": "editorTextFocus"
+                "when": "(resourceLangId == c || resourceLangId == cpp || resourceLangId == cuda-cpp || resourceLangId == objective-c || resourceLangId == objective-cpp) && editorTextFocus"
             },
             {
                 "command": "clangd.typeHierarchy",
                 "key": "Shift+Alt+t",
-                "when": "editorTextFocus"
+                "when": "(resourceLangId == cpp || resourceLangId == cuda-cpp || resourceLangId == objective-c || resourceLangId == objective-cpp) && editorTextFocus"
             }
         ],
         "menus": {

@@ -1,43 +1,72 @@
-import {basename} from 'path';
 import * as vscode from 'vscode';
 
-import {ClangdContext} from './clangd-context';
-import {Project} from './project/api';
-import {CmakeProjectStrategy} from './project/cmake-project-strategy';
-import {
-  ClangdProjectService,
-  ProjectConfiguration
-} from './project/project-service';
+import {ClangdExtension} from '../api/vscode-clangd';
 
-let projectService: ClangdProjectService|undefined;
+import {ClangdExtensionImpl} from './api';
+import {ClangdContextManager} from './clangd-context-manager';
+import {get, update} from './config';
+
 /**
  *  This method is called when the extension is activated. The extension is
  *  activated the very first time a command is executed.
  */
 export async function activate(context: vscode.ExtensionContext):
-    Promise<ClangdProjectService> {
-  if (!projectService) {
-    projectService = new ClangdProjectService();
-    await projectService.initialize();
-  }
-  const clangdContext = new ClangdContext(projectService);
+    Promise<ClangdExtension> {
+  const outputChannel =
+      vscode.window.createOutputChannel('clangd', {log: true});
+  context.subscriptions.push(outputChannel);
 
-  context.subscriptions.push(clangdContext);
+  const manager =
+      new ClangdContextManager(context.globalStoragePath, outputChannel);
+  context.subscriptions.push(manager);
 
-  // An empty place holder for the activate command, otherwise we'll get an
-  // "command is not registered" error.
   context.subscriptions.push(
-      vscode.commands.registerCommand('clangd.activate', async () => {}));
-  context.subscriptions.push(
-      vscode.commands.registerCommand('clangd.restart', async () => {
-        await clangdContext.dispose();
-        await clangdContext.activate(context.globalStoragePath);
+      vscode.commands.registerCommand('clangd.activate', async () => {
+        if (manager.isStarting() || manager.isRunning()) {
+          return;
+        }
+        vscode.commands.executeCommand('clangd.restart');
       }));
+  context.subscriptions.push(vscode.commands.registerCommand(
+      'clangd.restart', async (arg?: unknown) => {
+        if (!get<boolean>('enable')) {
+          vscode.window
+              .showInformationMessage(
+                  'Language features from Clangd are currently disabled. Would you like to enable them?',
+                  'Enable', 'Close')
+              .then(async (choice) => {
+                if (choice === 'Enable') {
+                  await update<boolean>('enable', true);
+                  vscode.commands.executeCommand('clangd.restart');
+                }
+              });
+          return;
+        }
 
-  await clangdContext.activate(context.globalStoragePath);
+        // With a Uri (e.g. from the config file watcher), only the clangd
+        // serving it restarts.
+        await manager.restart(arg instanceof vscode.Uri ? arg : undefined);
+      }));
+  context.subscriptions.push(vscode.commands.registerCommand(
+      'clangd.shutdown', async (arg?: unknown) => {
+        await manager.stop(arg instanceof vscode.Uri ? arg : undefined);
+      }));
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('clangd.enablePerFolderServer') &&
+        vscode.workspace.getConfiguration('clangd').get<boolean>('enable'))
+      vscode.commands.executeCommand('clangd.restart');
+  }));
 
-  const shouldCheck = vscode.workspace.getConfiguration('clangd').get(
-      'detectExtensionConflicts');
+  let shouldCheck = false;
+
+  if (vscode.workspace.getConfiguration('clangd').get<boolean>('enable')) {
+    await manager.start();
+
+    shouldCheck = vscode.workspace.getConfiguration('clangd').get<boolean>(
+                      'detectExtensionConflicts') ??
+                  false;
+  }
+
   if (shouldCheck) {
     const interval = setInterval(function() {
       const cppTools = vscode.extensions.getExtension('ms-vscode.cpptools');
@@ -69,62 +98,6 @@ export async function activate(context: vscode.ExtensionContext):
       }
     }, 5000);
   }
-  new CmakeProjectStrategy();
 
-  if (projectService && ProjectConfiguration.isProjectStatusEnabled()) {
-    const projectStatusItem =
-        vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
-    const command = 'clangd.change.activeProjectOverride'
-    projectStatusItem.command = command;
-    context.subscriptions.push(
-        projectStatusItem, vscode.commands.registerCommand(command, () => {
-          const options: vscode.QuickPickOptions = {
-            placeHolder: clangdContext.activeProjectOverride?.label,
-            canPickMany: false,
-            title:
-                'Choose the project default project for project external files'
-          };
-          const items: vscode.QuickPickItem[] =
-              projectService?.projects.map(project => ({
-                                             label: project.label ?? project.id,
-                                             detail: project.id
-                                           })) ??
-              [];
-          items?.push({
-            label: 'None',
-            description: 'Auto resolve to the last active project'
-          });
-          vscode.window.showQuickPick(items, options).then(async value => {
-            if (value?.detail) {
-              const project = await projectService?.resolve(
-                  vscode.Uri.parse(value.detail), true)
-              clangdContext.activeProjectOverride = project;
-              updateProjectStatusItem(projectStatusItem,
-                                      projectService!.currentProject,
-                                      clangdContext);
-            }
-          })
-        }), projectService.onCurrentProjectChanged(change => {
-          if (change.newProject) {
-            updateProjectStatusItem(projectStatusItem, change.newProject,
-                                    clangdContext);
-          }
-        }));
-  }
-  return projectService;
-}
-
-function updateProjectStatusItem(item: vscode.StatusBarItem,
-                                 project: Project|undefined,
-                                 context: ClangdContext) {
-  if (project) {
-    const activeProjectOverride = context.activeProjectOverride;
-    const activeProject = activeProjectOverride ?? project;
-    item.text = `Project: ${activeProject.label ?? activeProject.id}`
-    item.tooltip = `FallbackProject: ${
-        activeProjectOverride
-            ? activeProjectOverride.label ?? activeProjectOverride.id
-            : 'Auto'}`
-    item.show();
-  }
+  return new ClangdExtensionImpl(manager);
 }
